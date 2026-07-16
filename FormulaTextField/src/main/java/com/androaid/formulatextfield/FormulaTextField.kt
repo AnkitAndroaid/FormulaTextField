@@ -1,5 +1,8 @@
 package com.androaid.formulatextfield
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardActions
@@ -14,11 +17,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
@@ -33,6 +38,9 @@ fun FormulaTextField(
     modifier: Modifier = Modifier,
     label: String = "Calculation Input"
 ) {
+    val keyboardController = LocalSoftwareKeyboardController.current
+    var isFocused by remember { mutableStateOf(false) }
+
     // 💡 Track cursor position and selection using TextFieldValue
     var textFieldValue by remember {
         mutableStateOf(
@@ -74,6 +82,12 @@ fun FormulaTextField(
             },
             modifier = Modifier
                 .fillMaxWidth()
+                .onFocusChanged { 
+                    isFocused = it.isFocused
+                    if (it.isFocused) {
+                        keyboardController?.hide()
+                    }
+                }
                 .onPreviewKeyEvent { keyEvent ->
                     if (keyEvent.key == Key.Enter && keyEvent.type == KeyEventType.KeyUp) {
                         triggerEvaluation()
@@ -88,33 +102,69 @@ fun FormulaTextField(
             singleLine = true,
             textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace),
             keyboardOptions = KeyboardOptions(
-                // 💡 Changed to Decimal to show numeric pad by default
-                keyboardType = KeyboardType.Decimal,
+                keyboardType = KeyboardType.Password, // Hack to minimize keyboard popping up
                 imeAction = ImeAction.Done
             ),
             keyboardActions = KeyboardActions(
-                onDone = { triggerEvaluation() }
+                onDone = { 
+                    triggerEvaluation()
+                    isFocused = false
+                }
             )
         )
 
-        // 💡 Specialized Math Toolbar for operators
-        MathOperatorToolbar(
-            onOperatorClick = { operator ->
-                val selection = textFieldValue.selection
-                val currentText = textFieldValue.text
-                
-                val newText = StringBuilder(currentText)
-                    .replace(selection.start, selection.end, operator)
-                    .toString()
-                
-                val newCursorPosition = selection.start + operator.length
-                
-                textFieldValue = textFieldValue.copy(
-                    text = newText,
-                    selection = TextRange(newCursorPosition)
-                )
-                onValueChange(newText)
-            }
-        )
+        // 💡 Unified Custom Math Keypad
+        AnimatedVisibility(
+            visible = isFocused,
+            enter = expandVertically(),
+            exit = shrinkVertically()
+        ) {
+            MathKeypad(
+                onEvent = { event ->
+                    when (event) {
+                        is KeypadEvent.Character -> {
+                            val selection = textFieldValue.selection
+                            val currentText = textFieldValue.text
+                            val newText = StringBuilder(currentText)
+                                .replace(selection.start, selection.end, event.char)
+                                .toString()
+                            val newCursorPosition = selection.start + event.char.length
+                            textFieldValue = textFieldValue.copy(
+                                text = newText,
+                                selection = TextRange(newCursorPosition)
+                            )
+                            onValueChange(newText)
+                        }
+                        KeypadEvent.Backspace -> {
+                            val selection = textFieldValue.selection
+                            if (!selection.collapsed) {
+                                val newText = StringBuilder(textFieldValue.text)
+                                    .delete(selection.start, selection.end)
+                                    .toString()
+                                textFieldValue = textFieldValue.copy(
+                                    text = newText,
+                                    selection = TextRange(selection.start)
+                                )
+                                onValueChange(newText)
+                            } else if (selection.start > 0) {
+                                val newText = StringBuilder(textFieldValue.text)
+                                    .deleteAt(selection.start - 1)
+                                    .toString()
+                                textFieldValue = textFieldValue.copy(
+                                    text = newText,
+                                    selection = TextRange(selection.start - 1)
+                                )
+                                onValueChange(newText)
+                            }
+                        }
+                        KeypadEvent.Done -> {
+                            triggerEvaluation()
+                            isFocused = false
+                            keyboardController?.hide()
+                        }
+                    }
+                }
+            )
+        }
     }
 }
