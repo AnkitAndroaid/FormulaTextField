@@ -23,8 +23,8 @@ class FormulaVisualTransformation : VisualTransformation {
 
             // Regex patterns to isolate:
             // 1. Numeric constants (integers and decimals) -> (\b\d+(\.\d+)?\b)
-            // 2. Mathematical operators and brackets (+, -, *, /, ^, (, )) -> ([\+\-\*\/\^\(\)])
-            val regex = """(\b\d+(\.\d+)?\b)|([\+\-\*\/\^\(\)])""".toRegex()
+            // 2. Basic mathematical operators (+, -, *, /) -> ([\+\-\*\/])
+            val regex = """(\b\d+(\.\d+)?\b)|([\+\-\*\/])""".toRegex()
 
             regex.findAll(rawText).forEach { matchResult ->
                 val matchStart = matchResult.range.first
@@ -43,8 +43,8 @@ class FormulaVisualTransformation : VisualTransformation {
                             append(value)
                         }
                     }
-                    // Highlight operators and brackets (Burgundy/Bold)
-                    value.matches("""^[\+\-\*\/\^\(\)]$""".toRegex()) -> {
+                    // Highlight operators (Burgundy/Bold)
+                    value.matches("""^[\+\-\*\/]$""".toRegex()) -> {
                         withStyle(SpanStyle(color = Color(0xFFB06000), fontWeight = FontWeight.Bold)) {
                             append(value)
                         }

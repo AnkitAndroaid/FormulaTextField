@@ -16,7 +16,7 @@ import com.androaid.formulatextfield.FormulaTextField
 
 @Composable
 fun FormulaTestScreen(innerPadding: PaddingValues) {
-    var textState by rememberSaveable { mutableStateOf("(10 + 5) * 3") }
+    var textState by rememberSaveable { mutableStateOf("10 + 5 * 3") }
 
     Column(modifier = Modifier.padding(24.dp)) {
         FormulaTextField(

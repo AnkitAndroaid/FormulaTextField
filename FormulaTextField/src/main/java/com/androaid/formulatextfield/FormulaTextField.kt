@@ -1,25 +1,29 @@
 package com.androaid.formulatextfield
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 
 @Composable
 fun FormulaTextField(
@@ -29,12 +33,28 @@ fun FormulaTextField(
     modifier: Modifier = Modifier,
     label: String = "Calculation Input"
 ) {
-    val totalOpenBrackets = value.count { it == '(' }
-    val totalCloseBrackets = value.count { it == ')' }
-    val isBracketMismatched = totalOpenBrackets != totalCloseBrackets
+    // 💡 Track cursor position and selection using TextFieldValue
+    var textFieldValue by remember {
+        mutableStateOf(
+            TextFieldValue(
+                text = value,
+                selection = TextRange(value.length)
+            )
+        )
+    }
+
+    // Sync internal state when external value changes (e.g., from evaluation)
+    LaunchedEffect(value) {
+        if (value != textFieldValue.text) {
+            textFieldValue = textFieldValue.copy(
+                text = value,
+                selection = TextRange(value.length)
+            )
+        }
+    }
 
     val triggerEvaluation = {
-        if (value.isNotBlank() && !isBracketMismatched) {
+        if (value.isNotBlank()) {
             try {
                 val result = evaluateMathExpression(value)
                 val formattedResult = if (result % 1 == 0.0) result.toInt().toString() else result.toString()
@@ -45,50 +65,56 @@ fun FormulaTextField(
         }
     }
 
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        modifier = modifier
-            .fillMaxWidth()
-            .onPreviewKeyEvent { keyEvent ->
-                // 💡 FIX 2: Only trigger evaluation on KeyUp event type to prevent double execution
-                if (keyEvent.key == Key.Enter && keyEvent.type == KeyEventType.KeyUp) {
-                    triggerEvaluation()
-                    true 
-                } else {
-                    false
-                }
+    Column(modifier = modifier) {
+        OutlinedTextField(
+            value = textFieldValue,
+            onValueChange = { newValue ->
+                textFieldValue = newValue
+                onValueChange(newValue.text)
             },
-        label = { Text(text = label) },
-        placeholder = { Text(text = "e.g., (12 + 45) * 3") },
-        visualTransformation = remember { FormulaVisualTransformation() },
-        isError = isBracketMismatched,
-        singleLine = true,
-        textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace),
-        keyboardOptions = KeyboardOptions(
-            // 💡 FIX 1: Change to Text type so the user can access standard symbols (+, -, *, /)
-            keyboardType = KeyboardType.Text, 
-            imeAction = ImeAction.Done 
-        ),
-        keyboardActions = KeyboardActions(
-            onDone = { triggerEvaluation() }
-        ),
-        trailingIcon = {
-            if (isBracketMismatched) {
-                Icon(
-                    imageVector = Icons.Default.Warning,
-                    contentDescription = "Mismatched parentheses error",
-                    tint = MaterialTheme.colorScheme.error
+            modifier = Modifier
+                .fillMaxWidth()
+                .onPreviewKeyEvent { keyEvent ->
+                    if (keyEvent.key == Key.Enter && keyEvent.type == KeyEventType.KeyUp) {
+                        triggerEvaluation()
+                        true
+                    } else {
+                        false
+                    }
+                },
+            label = { Text(text = label) },
+            placeholder = { Text(text = "e.g., 12 + 45 * 3") },
+            visualTransformation = remember { FormulaVisualTransformation() },
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace),
+            keyboardOptions = KeyboardOptions(
+                // 💡 Changed to Decimal to show numeric pad by default
+                keyboardType = KeyboardType.Decimal,
+                imeAction = ImeAction.Done
+            ),
+            keyboardActions = KeyboardActions(
+                onDone = { triggerEvaluation() }
+            )
+        )
+
+        // 💡 Specialized Math Toolbar for operators
+        MathOperatorToolbar(
+            onOperatorClick = { operator ->
+                val selection = textFieldValue.selection
+                val currentText = textFieldValue.text
+                
+                val newText = StringBuilder(currentText)
+                    .replace(selection.start, selection.end, operator)
+                    .toString()
+                
+                val newCursorPosition = selection.start + operator.length
+                
+                textFieldValue = textFieldValue.copy(
+                    text = newText,
+                    selection = TextRange(newCursorPosition)
                 )
+                onValueChange(newText)
             }
-        },
-        supportingText = {
-            if (isBracketMismatched) {
-                Text(
-                    text = "Mismatched Parentheses: Opened $totalOpenBrackets but Closed $totalCloseBrackets",
-                    color = MaterialTheme.colorScheme.error
-                )
-            }
-        }
-    )
+        )
+    }
 }
