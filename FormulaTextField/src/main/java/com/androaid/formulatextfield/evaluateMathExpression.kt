@@ -26,6 +26,7 @@ fun evaluateMathExpression(str: String): Double {
 
         fun parse(): Double {
             nextChar()
+            if (eat('='.code)) { /* Ignore leading equals if present */ }
             val x = parseExpression()
             if (pos < str.length) throw RuntimeException("Unexpected character: " + ch.toChar())
             return x

@@ -1,12 +1,11 @@
 package com.androaid.formulatextfield
-
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -17,15 +16,19 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
@@ -39,7 +42,12 @@ fun FormulaTextField(
     label: String = "Calculation Input"
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
-    var isFocused by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
+    val focusRequester = remember { FocusRequester() }
+    
+    // 💡 Use InteractionSource for more reliable focus tracking
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
 
     // 💡 Track cursor position and selection using TextFieldValue
     var textFieldValue by remember {
@@ -49,6 +57,18 @@ fun FormulaTextField(
                 selection = TextRange(value.length)
             )
         )
+    }
+
+    val isFormulaMode = isFocused && textFieldValue.text.startsWith("=")
+
+    // Manage keyboard transitions
+    LaunchedEffect(isFormulaMode, isFocused) {
+        if (isFormulaMode) {
+            keyboardController?.hide()
+        } else if (isFocused) {
+            // Show system keyboard if focused but not in formula mode
+            keyboardController?.show()
+        }
     }
 
     // Sync internal state when external value changes (e.g., from evaluation)
@@ -62,13 +82,16 @@ fun FormulaTextField(
     }
 
     val triggerEvaluation = {
-        if (value.isNotBlank()) {
-            try {
-                val result = evaluateMathExpression(value)
-                val formattedResult = if (result % 1 == 0.0) result.toInt().toString() else result.toString()
-                onEvaluateResult(formattedResult)
-            } catch (e: Exception) {
-                onEvaluateResult("Error")
+        if (textFieldValue.text.startsWith("=")) {
+            val expression = textFieldValue.text.drop(1)
+            if (expression.isNotBlank()) {
+                try {
+                    val result = evaluateMathExpression(expression)
+                    val formattedResult = if (result % 1 == 0.0) result.toInt().toString() else result.toString()
+                    onEvaluateResult(formattedResult)
+                } catch (e: Exception) {
+                    onEvaluateResult("Error $e")
+                }
             }
         }
     }
@@ -82,12 +105,7 @@ fun FormulaTextField(
             },
             modifier = Modifier
                 .fillMaxWidth()
-                .onFocusChanged { 
-                    isFocused = it.isFocused
-                    if (it.isFocused) {
-                        keyboardController?.hide()
-                    }
-                }
+                .focusRequester(focusRequester)
                 .onPreviewKeyEvent { keyEvent ->
                     if (keyEvent.key == Key.Enter && keyEvent.type == KeyEventType.KeyUp) {
                         triggerEvaluation()
@@ -96,29 +114,49 @@ fun FormulaTextField(
                         false
                     }
                 },
+            interactionSource = interactionSource,
             label = { Text(text = label) },
-            placeholder = { Text(text = "e.g., 12 + 45 * 3") },
+            placeholder = { Text(text = "e.g., =12 + 45 * 3") },
+            leadingIcon = {
+                IconButton(
+                    onClick = {
+                        focusRequester.requestFocus()
+                        if (!textFieldValue.text.startsWith("=")) {
+                            val newText = "=" + textFieldValue.text
+                            textFieldValue = textFieldValue.copy(
+                                text = newText,
+                                selection = TextRange(newText.length)
+                            )
+                            onValueChange(newText)
+                        }
+                    },
+                    modifier = Modifier.testTag("FormulaButton")
+                ) {
+                    Text(
+                        text = "=",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isFormulaMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                    )
+                }
+            },
             visualTransformation = remember { FormulaVisualTransformation() },
             singleLine = true,
             textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace),
             keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Password, // Hack to minimize keyboard popping up
+                keyboardType = KeyboardType.Number,
                 imeAction = ImeAction.Done
             ),
             keyboardActions = KeyboardActions(
                 onDone = { 
                     triggerEvaluation()
-                    isFocused = false
+                    focusManager.clearFocus()
                 }
             )
         )
 
-        // 💡 Unified Custom Math Keypad
-        AnimatedVisibility(
-            visible = isFocused,
-            enter = expandVertically(),
-            exit = shrinkVertically()
-        ) {
+        // 💡 Unified Custom Math Keypad - Only visible in Formula Mode
+        if (isFormulaMode) {
             MathKeypad(
                 onEvent = { event ->
                     when (event) {
@@ -159,7 +197,7 @@ fun FormulaTextField(
                         }
                         KeypadEvent.Done -> {
                             triggerEvaluation()
-                            isFocused = false
+                            focusManager.clearFocus()
                             keyboardController?.hide()
                         }
                     }

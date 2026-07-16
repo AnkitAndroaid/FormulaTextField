@@ -20,7 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 
 sealed class KeypadEvent {
@@ -37,6 +37,7 @@ fun MathKeypad(
     Surface(
         modifier = modifier
             .fillMaxWidth()
+            .testTag("MathKeypad")
             .background(MaterialTheme.colorScheme.surfaceVariant),
         tonalElevation = 4.dp
     ) {
@@ -91,6 +92,7 @@ fun MathKeypad(
                 onClick = { onEvent(KeypadEvent.Done) },
                 modifier = Modifier
                     .fillMaxWidth()
+                    .testTag("CalculateButton")
                     .height(48.dp),
                 shape = MaterialTheme.shapes.medium,
                 colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
