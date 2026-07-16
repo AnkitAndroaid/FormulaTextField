@@ -181,6 +181,7 @@ fun FormulaTextField(
             onValueChange = { state.updateTextFieldValue(it) },
             modifier = Modifier
                 .fillMaxWidth()
+                .testTag("FormulaTextField")
                 .focusRequester(focusRequester)
                 .onPreviewKeyEvent { keyEvent ->
                     if (keyEvent.key == Key.Enter && keyEvent.type == KeyEventType.KeyUp) {
